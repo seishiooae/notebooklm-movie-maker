@@ -1,0 +1,6 @@
+streamlit
+openai-whisper
+moviepy
+pdf2image
+torch
+pymupdf
