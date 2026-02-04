@@ -28,7 +28,7 @@ def extract_slide_titles(pdf_path):
 # --- UI Layout & Styling ---
 st.set_page_config(page_title="NotebookLM Video Maker", layout="wide", page_icon="🎬")
 
-# タイトルセクション（初期の文言をテックレイアウトで）
+# タイトルセクション
 st.title("🎬 NotebookLM 自動動画合成ツール")
 st.markdown("#### PDFのタイトルと音声の文脈をAIが理解して、自動で動画を組み立てます。")
 
@@ -109,9 +109,10 @@ if uploaded_pdf and uploaded_audio:
                     f.write(uploaded_audio.read())
                 progress_bar.progress(50)
 
-                # 3. AI分析（Whisper）
-                status_text.text("Step 3/4: AIが音声を聴き取って同期ポイントを特定中...")
-                model = whisper.load_model("base", device="cpu")
+                # 3. AI分析（Whisper smallモデル）
+                status_text.text("Step 3/4: AIが音声を聴き取って同期ポイントを特定中 (Model: small)...")
+                # モデルをbaseからsmallに変更
+                model = whisper.load_model("small", device="cpu")
                 result = model.transcribe(audio_path, language="ja", fp16=False)
 
                 markers = [{"slide": 1, "start": 0.0}]
@@ -137,7 +138,7 @@ if uploaded_pdf and uploaded_audio:
                                 st.write(f"✨ タイトル一致で欠番を補完しました: '{title}' (Slide {page_num})")
                                 break
                 
-                # --- エラー通知機能 ---
+                # エラー通知機能
                 missing_slides = [i for i in range(1, total_slides + 1) if i not in found_slides]
                 if missing_slides:
                     st.warning(f"⚠️ 欠落検知: スライド {missing_slides} が特定できずスキップされました。プロンプトを見直すと改善する場合があります。")
@@ -182,7 +183,7 @@ if uploaded_pdf and uploaded_audio:
                     final_video.close()
                     audio_clip.close()
                 else:
-                    st.error("エラー: スライドの切り替えポイントを1つも特定できませんでした。プロンプトを確認してください。")
+                    st.error("エラー: スライドの切り替えポイントを1つも特定できませんでした。")
 
         except Exception as e:
             st.error(f"システムエラーが発生しました: {e}")
