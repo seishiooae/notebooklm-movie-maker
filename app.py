@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import re
 import tempfile
+import gc  # メモリ解放用
 import torch
 import whisper
 import fitz  # PyMuPDF: タイトル抽出用
@@ -109,11 +110,14 @@ if uploaded_pdf and uploaded_audio:
                     f.write(uploaded_audio.read())
                 progress_bar.progress(50)
 
-                # 3. AI分析（Whisper smallモデル）
-                status_text.text("Step 3/4: AIが音声を聴き取って同期ポイントを特定中 (Model: small)...")
-                # モデルをbaseからsmallに変更
-                model = whisper.load_model("small", device="cpu")
+                # 3. AI分析（安定のためbaseモデルを使用）
+                status_text.text("Step 3/4: AIが音声を聴き取って同期ポイントを特定中...")
+                model = whisper.load_model("base", device="cpu")
                 result = model.transcribe(audio_path, language="ja", fp16=False)
+                
+                # 重要：メモリを節約するためにモデルを削除し、ゴミ出しを実行
+                del model
+                gc.collect()
 
                 markers = [{"slide": 1, "start": 0.0}]
                 found_slides = {1}
@@ -128,7 +132,7 @@ if uploaded_pdf and uploaded_audio:
                             markers.append({"slide": num, "start": segment['start']})
                             found_slides.add(num)
 
-                # タイトル・インテリジェント・補完（欠番対策）
+                # タイトル・インテリジェント・補完
                 for page_num, title in slide_titles.items():
                     if page_num not in found_slides and len(title) > 3:
                         for segment in result['segments']:
@@ -141,14 +145,14 @@ if uploaded_pdf and uploaded_audio:
                 # エラー通知機能
                 missing_slides = [i for i in range(1, total_slides + 1) if i not in found_slides]
                 if missing_slides:
-                    st.warning(f"⚠️ 欠落検知: スライド {missing_slides} が特定できずスキップされました。プロンプトを見直すと改善する場合があります。")
+                    st.warning(f"⚠️ 欠落検知: スライド {missing_slides} が特定できずスキップされました。")
                 else:
                     st.success("✨ すべてのスライドが完璧に同期されました！")
 
                 progress_bar.progress(75)
 
                 # 4. ビデオ・レンダリング
-                status_text.text("Step 4/4: 動画をレンダリング中...")
+                status_text.text("Step 4/4: 動画をレンダリング中...（これには時間がかかります）")
                 markers = sorted(markers, key=lambda x: x["start"])
                 audio_clip = AudioFileClip(audio_path)
                 clips = []
@@ -166,7 +170,9 @@ if uploaded_pdf and uploaded_audio:
                 if clips:
                     final_video = concatenate_videoclips(clips).with_audio(audio_clip)
                     output_file = os.path.join(tmpdir, "final_video.mp4")
-                    final_video.write_videofile(output_file, fps=5, codec="libx264", audio_codec="aac")
+                    
+                    # サーバーへの負担を減らすためfpsを少し下げ、メモリ負荷を軽減
+                    final_video.write_videofile(output_file, fps=5, codec="libx264", audio_codec="aac", logger=None)
                     
                     progress_bar.progress(100)
                     status_text.text("動画の生成が完了しました。")
@@ -183,7 +189,7 @@ if uploaded_pdf and uploaded_audio:
                     final_video.close()
                     audio_clip.close()
                 else:
-                    st.error("エラー: スライドの切り替えポイントを1つも特定できませんでした。")
+                    st.error("エラー: スライドの切り替えポイントを特定できませんでした。")
 
         except Exception as e:
             st.error(f"システムエラーが発生しました: {e}")
