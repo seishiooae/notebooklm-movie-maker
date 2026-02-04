@@ -28,21 +28,28 @@ def extract_slide_titles(pdf_path):
 # --- UI Layout & Styling ---
 st.set_page_config(page_title="AI Video Sync Master", layout="wide", page_icon="⚡")
 
-# タイトルセクション
+# タイトルセクション（モダン・テック）
 st.title("⚡ AI Video Sync Master")
-st.markdown("#### PDF資料と音声をAIが完全同期。欠落したページを自動検知する進化版。")
+st.markdown("#### PDFプレゼンテーションと音声をAIが完全同期。欠落ページ検知機能付き。")
 
 # --- クイックスタートガイド ---
 with st.expander("🚀 クイックスタート・ガイド", expanded=False):
     st.markdown("""
     ### 🛠️ ワークフロー
-    1. **AI Voice Logic**: プロンプトをNotebookLMに入力し、音声を生成。
-    2. **Source Upload**: スライドPDFとAudioファイルをロード。
-    3. **Core Synthesis**: AIが同期ポイントを解析。見つからないページがあれば警告を表示します。
+    
+    1.  **AI Voice Logic**: 
+        - 下記の「System Prompt」をNotebookLMのカスタマイズ欄にインプット。
+        - 生成されたAudioファイルをエクスポートします。
+    2.  **Source Upload**:
+        - スライドPDFとAudioファイルをシステムにロードします。
+    3.  **Core Synthesis**:
+        - AIが文脈を解析し、スライドと音声を同期。見つからないページがあれば警告を表示します。
     """)
 
-# --- System Prompt ---
+# --- System Prompt for NotebookLM ---
 st.subheader("🔗 System Prompt (Copy & Paste)")
+st.info("NotebookLMの「音声のカスタマイズ」に入力してください。クリックでコピーできます。")
+
 prompt_text = """あなたはプロのプレゼンターとして、スライドの内容を自然な流れで解説してください。
 ただし、後で動画編集を行うための目印として、スライドが切り替わるタイミングで、必ず以下のいずれかのフレーズを自然に組み込んでください。
 
@@ -59,14 +66,14 @@ st.code(prompt_text, language="text")
 
 st.markdown("---")
 
-# --- アセット・アップロード ---
+# --- アセット・アップロード・グリッド ---
 col1, col2 = st.columns(2)
 with col1:
     st.markdown("##### 📁 Slide Assets")
     uploaded_pdf = st.file_uploader("Upload PDF Presentation", type="pdf", label_visibility="collapsed")
 with col2:
     st.markdown("##### 🎙️ Audio Assets")
-    uploaded_audio = st.file_uploader("Upload Audio", type=["wav", "mp3", "m4a"], label_visibility="collapsed")
+    uploaded_audio = st.file_uploader("Upload Audio (.mp3 / .m4a / .wav)", type=["wav", "mp3", "m4a"], label_visibility="collapsed")
 
 # --- メイン・プロセッシング ---
 if uploaded_pdf and uploaded_audio:
@@ -79,7 +86,7 @@ if uploaded_pdf and uploaded_audio:
             status_text = st.empty()
             
             with st.spinner("AI Engine is processing..."):
-                # PDF処理
+                # 1. PDF処理
                 status_text.text("Step 1/4: Analyzing PDF structure...")
                 pdf_path = os.path.join(tmpdir, "input.pdf")
                 with open(pdf_path, "wb") as f:
@@ -95,7 +102,7 @@ if uploaded_pdf and uploaded_audio:
                     image_paths.append(path)
                 progress_bar.progress(25)
 
-                # 音声処理
+                # 2. 音声処理
                 status_text.text("Step 2/4: Initializing Audio Engine...")
                 audio_ext = os.path.splitext(uploaded_audio.name)[1]
                 audio_path = os.path.join(tmpdir, f"input_audio{audio_ext}")
@@ -103,15 +110,15 @@ if uploaded_pdf and uploaded_audio:
                     f.write(uploaded_audio.read())
                 progress_bar.progress(50)
 
-                # Whisper分析
-                status_text.text("Step 3/4: Transcribing and Syncing...")
+                # 3. AI分析（Whisper）
+                status_text.text("Step 3/4: Transcribing and Syncing with Whisper AI...")
                 model = whisper.load_model("base", device="cpu")
                 result = model.transcribe(audio_path, language="ja", fp16=False)
 
                 markers = [{"slide": 1, "start": 0.0}]
                 found_slides = {1}
 
-                # キーワード検索
+                # キーワード・マッチング（「〇枚目」など）
                 for segment in result['segments']:
                     text = segment['text']
                     match = re.search(r"(\d+)\s*(枚目|ページ|スライド)", text)
@@ -121,7 +128,7 @@ if uploaded_pdf and uploaded_audio:
                             markers.append({"slide": num, "start": segment['start']})
                             found_slides.add(num)
 
-                # タイトル補完
+                # タイトル・インテリジェント・補完（欠番対策）
                 for page_num, title in slide_titles.items():
                     if page_num not in found_slides and len(title) > 3:
                         for segment in result['segments']:
@@ -130,18 +137,17 @@ if uploaded_pdf and uploaded_audio:
                                 found_slides.add(page_num)
                                 break
                 
-                # --- 追加機能: 欠番のチェックと表示 ---
+                # --- エラー通知機能の追加 ---
                 missing_slides = [i for i in range(1, total_slides + 1) if i not in found_slides]
                 if missing_slides:
-                    st.warning(f"⚠️ 以下のスライドが見つからず、スキップされました: {missing_slides}")
-                    st.info("解決策: NotebookLMのプロンプトで、これらのスライド番号をハッキリ言うように指示するか、スライドの1行目（タイトル）を音声に含めてください。")
+                    st.warning(f"⚠️ 欠落検知: スライド {missing_slides} が特定できずスキップされました。")
                 else:
-                    st.success("✨ すべてのスライドの同期ポイントを特定しました！")
+                    st.success("✨ All scenes synchronized perfectly!")
 
                 progress_bar.progress(75)
 
-                # ビデオ・レンダリング
-                status_text.text("Step 4/4: Final Rendering...")
+                # 4. ビデオ・レンダリング
+                status_text.text("Step 4/4: Final Rendering (MoviePy Engine)...")
                 markers = sorted(markers, key=lambda x: x["start"])
                 audio_clip = AudioFileClip(audio_path)
                 clips = []
@@ -162,15 +168,21 @@ if uploaded_pdf and uploaded_audio:
                     final_video.write_videofile(output_file, fps=5, codec="libx264", audio_codec="aac")
                     
                     progress_bar.progress(100)
-                    status_text.text("Synthesis Complete.")
+                    status_text.text("Process Completed.")
+                    st.success("✅ Video successfully synthesized!")
                     
                     with open(output_file, "rb") as f:
-                        st.download_button(label="📥 Download Exported Video", data=f, file_name="ai_sync_video.mp4", mime="video/mp4")
+                        st.download_button(
+                            label="📥 Download Exported Video",
+                            data=f,
+                            file_name="ai_sync_presentation.mp4",
+                            mime="video/mp4"
+                        )
                     
                     final_video.close()
                     audio_clip.close()
                 else:
-                    st.error("Fatal Error: 有効なスライドマーカーが1つも見つかりませんでした。")
+                    st.error("Sync Failure: 切り替えポイントを特定できませんでした。プロンプトを確認してください。")
 
         except Exception as e:
             st.error(f"System Error: {e}")
